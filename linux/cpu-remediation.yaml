@@ -1,0 +1,43 @@
+---
+- name: Kill high CPU processes on Linux
+  hosts: lin-servers
+  become: yes
+  gather_facts: no
+
+  vars:
+    cpu_threshold: 80   # % CPU usage above which process will be killed
+    log_file: /var/log/high_cpu_kill.log
+
+  tasks:
+
+    - name: Capture current top CPU processes
+      shell: "ps -eo pid,comm,%cpu --sort=-%cpu | head -n 10"
+      register: top_processes
+
+    - name: Log current processes before remediation
+      lineinfile:
+        path: "{{ log_file }}"
+        line: "=== BEFORE === {{ ansible_date_time.iso8601 }}\n{{ top_processes.stdout }}"
+        create: yes
+      delegate_to: localhost
+
+    - name: Find PIDs above threshold
+      shell: "ps -eo pid,%cpu --sort=-%cpu | awk '$2 > {{ cpu_threshold }} {print $1}'"
+      register: high_cpu_pids
+
+    - name: Kill high CPU processes
+      shell: "kill -9 {{ item }}"
+      loop: "{{ high_cpu_pids.stdout_lines }}"
+      when: high_cpu_pids.stdout_lines | length > 0
+
+    - name: Capture processes after remediation
+      shell: "ps -eo pid,comm,%cpu --sort=-%cpu | head -n 10"
+      register: post_processes
+
+    - name: Log processes after remediation
+      lineinfile:
+        path: "{{ log_file }}"
+        line: "=== AFTER === {{ ansible_date_time.iso8601 }}\n{{ post_processes.stdout }}"
+        create: yes
+      delegate_to: localhost
+
