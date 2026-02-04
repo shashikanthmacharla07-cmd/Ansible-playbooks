@@ -1,0 +1,40 @@
+---
+- name: Remove compressed log files under /var/log
+  hosts: lin_servers
+  become: yes
+  gather_facts: no
+
+  vars:
+    log_file: /var/log/log_cleanup_audit.log
+
+  tasks:
+
+    - name: List compressed log files before cleanup
+      shell: "find /var/log -type f \\( -name '*.zip' -o -name '*.gz' \\)"
+      register: before_files
+
+    - name: Log files before cleanup
+      lineinfile:
+        path: "{{ log_file }}"
+        line: "=== BEFORE === {{ ansible_date_time.iso8601 }}\n{{ before_files.stdout }}"
+        create: yes
+      delegate_to: localhost
+
+    - name: Remove compressed log files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ before_files.stdout_lines }}"
+      when: before_files.stdout_lines | length > 0
+
+    - name: List compressed log files after cleanup
+      shell: "find /var/log -type f \\( -name '*.zip' -o -name '*.gz' \\)"
+      register: after_files
+
+    - name: Log files after cleanup
+      lineinfile:
+        path: "{{ log_file }}"
+        line: "=== AFTER === {{ ansible_date_time.iso8601 }}\n{{ after_files.stdout }}"
+        create: yes
+      delegate_to: localhost
+
