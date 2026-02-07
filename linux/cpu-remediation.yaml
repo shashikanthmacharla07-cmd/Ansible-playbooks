@@ -1,6 +1,6 @@
 ---
 - name: Kill high CPU processes on Linux
-  hosts: lin-servers
+  hosts: lin_servers
   become: yes
   gather_facts: no
 
