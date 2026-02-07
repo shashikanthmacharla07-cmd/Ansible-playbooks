@@ -18,7 +18,8 @@
         path: "{{ log_file }}"
         line: "=== BEFORE === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ before_files.stdout }}"
         create: yes
-      delegate_to: localhost
+          ### delegate_to: localhost
+      become: yes
 
     - name: Remove compressed log files
       file:
@@ -36,5 +37,6 @@
         path: "{{ log_file }}"
         line: "=== AFTER === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ after_files.stdout }}"
         create: yes
-      delegate_to: localhost
+          #delegate_to: localhost
+      become: yes
 

@@ -19,7 +19,8 @@
         path: "{{ log_file }}"
         line: "=== BEFORE === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ top_mem_processes.stdout }}"
         create: yes
-      delegate_to: localhost
+          #delegate_to: localhost
+      become: yes
 
     - name: Extract PIDs of top memory processes
       shell: "ps -eo pid --sort=-rss | head -n {{ top_n }}"
@@ -39,5 +40,6 @@
         path: "{{ log_file }}"
         line: "=== AFTER === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ post_mem_processes.stdout }}"
         create: yes
-      delegate_to: localhost
+          # delegate_to: localhost
+      become: yes  
 
