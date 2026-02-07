@@ -17,7 +17,7 @@
     - name: Log current processes before remediation
       lineinfile:
         path: "{{ log_file }}"
-        line: "=== BEFORE === {{ ansible_date_time.iso8601 }}\n{{ top_processes.stdout }}"
+        line: "=== BEFORE === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ top_processes.stdout }}"
         create: yes
       delegate_to: localhost
 
@@ -37,7 +37,7 @@
     - name: Log processes after remediation
       lineinfile:
         path: "{{ log_file }}"
-        line: "=== AFTER === {{ ansible_date_time.iso8601 }}\n{{ post_processes.stdout }}"
+        line: "=== AFTER === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ post_processes.stdout }}"
         create: yes
       delegate_to: localhost
 

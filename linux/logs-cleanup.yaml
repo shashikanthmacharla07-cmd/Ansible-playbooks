@@ -16,7 +16,7 @@
     - name: Log files before cleanup
       lineinfile:
         path: "{{ log_file }}"
-        line: "=== BEFORE === {{ ansible_date_time.iso8601 }}\n{{ before_files.stdout }}"
+        line: "=== BEFORE === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ before_files.stdout }}"
         create: yes
       delegate_to: localhost
 
@@ -34,7 +34,7 @@
     - name: Log files after cleanup
       lineinfile:
         path: "{{ log_file }}"
-        line: "=== AFTER === {{ ansible_date_time.iso8601 }}\n{{ after_files.stdout }}"
+        line: "=== AFTER === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ after_files.stdout }}"
         create: yes
       delegate_to: localhost
 
