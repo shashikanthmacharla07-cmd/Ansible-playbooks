@@ -20,6 +20,7 @@
         line: "=== BEFORE === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ top_processes.stdout }}"
         create: yes
       delegate_to: localhost
+      become: false  
 
     - name: Find PIDs above threshold
       shell: "ps -eo pid,%cpu --sort=-%cpu | awk '$2 > {{ cpu_threshold }} {print $1}'"
@@ -40,4 +41,5 @@
         line: "=== AFTER === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ post_processes.stdout }}"
         create: yes
       delegate_to: localhost
+      become: false
 
