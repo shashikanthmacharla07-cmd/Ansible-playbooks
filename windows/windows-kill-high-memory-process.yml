@@ -1,7 +1,7 @@
 ---
 # Playbook to kill high memory processes on Windows
 - name: Kill High Memory Processes
-  hosts: all
+  hosts: win_servers 
   gather_facts: no
   vars:
     process_limit: 5
