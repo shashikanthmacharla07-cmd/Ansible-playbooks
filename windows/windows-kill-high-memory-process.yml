@@ -51,4 +51,3 @@
           }
         }
       when: high_mem_pids | length > 0
-  ``
