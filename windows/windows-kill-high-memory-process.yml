@@ -1,53 +1,89 @@
----
-- name: Kill high memory consuming processes on Windows (Actual Kill)
+- name: Kill High Memory Processes Immediate
   hosts: win_servers
   gather_facts: no
-
   vars:
-    memory_threshold_mb: 500         # Kill any process using more than this memory
-    exclude_names:                   # Processes to NEVER kill
+    process_limit: 5
+    what_if_mode: false          # set to false to actually stop processes (this playbook uses false)
+    memory_threshold_mb: 200
+    kill_retries: 3
+    kill_retry_delay: 2
+    excluded_processes:
       - "System"
-      - "Idle"
       - "svchost"
-      - "winlogon"
-      - "lsass"
       - "csrss"
-      - "services"
       - "wininit"
-      - "smss"
+      - "services"
+      - "lsass"
+      - "winlogon"
       - "explorer"
-
   tasks:
+    - name: Build candidate list with PIDs (use WorkingSet64)
+      ansible.windows.win_powershell:
+        script: |
+          $limit = {{ process_limit }}
+          $thresholdBytes = {{ memory_threshold_mb }} * 1MB
+          $excluded = @(
+            {% for process in excluded_processes %}
+            "{{ process }}"{{ "," if not loop.last }}
+            {% endfor %}
+          )
+          $candidates = Get-Process |
+            Where-Object { $_.WorkingSet64 -gt $thresholdBytes -and ($excluded -notcontains $_.ProcessName) } |
+            Sort-Object -Property WorkingSet64 -Descending |
+            Select-Object -First $limit |
+            Select-Object ProcessName, Id, @{Name='MemoryMB';Expression={[math]::Round($_.WorkingSet64/1MB,2)}}
+          $candidates | ConvertTo-Json -Depth 3
+      register: candidates
 
-    - name: Get list of processes with memory usage
-    - ansible.windows.win_shell: |
-        Get-Process | Select-Object Name,Id,@{Name='WS_MB';Expression={[math]::Round($_.WorkingSet64/1MB,0)}} |
-        ConvertTo-Json
-      register: proc_list
-
-    - name: Build list of high memory PIDs
-      set_fact:
-        high_mem_pids: >-
+    - name: Show candidate processes safely
+      debug:
+        msg: >-
           {{
-            proc_list.stdout | from_json
-            | selectattr('WS_MB','>', memory_threshold_mb)
-            | rejectattr('Name','in', exclude_names)
-            | map(attribute='Id')
-            | list
+            (candidates.stdout | default('[]') )
+            | from_json
           }}
 
-    - name: Show processes that will be killed
-      debug:
-        msg: "Processes to kill (PIDs): {{ high_mem_pids }}"
-
-    - name: Kill high memory processes
-      ansible.windows.win_shell: |
-        foreach ($pid in {{ high_mem_pids }}) {
-          try {
-            Write-Output "Killing PID $pid"
-            Stop-Process -Id $pid -Force -ErrorAction Stop
-          } catch {
-            Write-Output "Failed to kill PID $pid: $($_.Exception.Message)"
+    - name: Kill each candidate by Id with retries and verification
+      ansible.windows.win_powershell:
+        script: |
+          $whatIf = {{ ' $true' if what_if_mode else ' $false' }}
+          $retries = {{ kill_retries }}
+          $delay = {{ kill_retry_delay }}
+          $candidates = {{ candidates.stdout | default('[]') | to_json }}
+          $results = @()
+          foreach ($c in $candidates) {
+            $id = $c.Id
+            $name = $c.ProcessName
+            $entry = [ordered]@{ ProcessName = $name; Id = $id; Attempts = 0; Status = 'Pending' }
+            $stopped = $false
+            for ($i=1; $i -le $retries; $i++) {
+              $entry.Attempts = $i
+              $proc = Get-Process -Id $id -ErrorAction SilentlyContinue
+              if ($null -eq $proc) { $entry.Status = 'NotFound'; $stopped = $true; break }
+              if (-not $whatIf) {
+                try {
+                  Stop-Process -Id $id -Force -ErrorAction Stop
+                } catch {
+                  $entry.Error = $_.Exception.Message
+                }
+              } else {
+                Stop-Process -Id $id -WhatIf -ErrorAction SilentlyContinue
+              }
+              Start-Sleep -Seconds $delay
+              $proc = Get-Process -Id $id -ErrorAction SilentlyContinue
+              if ($null -eq $proc) { $entry.Status = 'Stopped'; $stopped = $true; break }
+            }
+            if (-not $stopped -and $entry.Status -ne 'Stopped') { $entry.Status = 'StillRunning' }
+            $results += $entry
           }
-        }
-      when: high_mem_pids | length > 0
+          $results | ConvertTo-Json -Depth 4
+      register: kill_result
+
+    - name: Show kill results safely
+      debug:
+        msg: >-
+          {{
+            (kill_result.stdout | default('[]'))
+            | from_json
+          }}
+
