@@ -1,6 +1,6 @@
 ---
 - name: Kill high memory consuming processes on Windows (Actual Kill)
-  hosts: windows
+  hosts: win_servers
   gather_facts: no
 
   vars:
