@@ -1,10 +1,12 @@
-# Playbook to kill high memory processes on Windows
-- name: Kill High Memory Processes
+- name: Kill High Memory Processes Robust
   hosts: win_servers
   gather_facts: no
   vars:
     process_limit: 5
-    what_if_mode: true        # set to false to actually stop processes
+    what_if_mode: true          # set to false to actually stop processes
+    memory_threshold_mb: 200
+    kill_retries: 3
+    kill_retry_delay: 2
     excluded_processes:
       - "System"
       - "svchost"
@@ -15,37 +17,65 @@
       - "winlogon"
       - "explorer"
   tasks:
-    - name: Get and kill high memory processes
+    - name: Build candidate list with PIDs (use WorkingSet64)
       ansible.windows.win_powershell:
         script: |
           $limit = {{ process_limit }}
-          $whatIf = {{ ' $true' if what_if_mode else ' $false' }}
+          $thresholdBytes = {{ memory_threshold_mb }} * 1MB
           $excluded = @(
             {% for process in excluded_processes %}
             "{{ process }}"{{ "," if not loop.last }}
             {% endfor %}
           )
+          $candidates = Get-Process |
+            Where-Object { $_.WorkingSet64 -gt $thresholdBytes -and ($excluded -notcontains $_.ProcessName) } |
+            Sort-Object -Property WorkingSet64 -Descending |
+            Select-Object -First $limit |
+            Select-Object ProcessName, Id, @{Name='MemoryMB';Expression={[math]::Round($_.WorkingSet64/1MB,2)}}
+          $candidates | ConvertTo-Json -Depth 3
+      register: candidates
 
-          # threshold in bytes (example: 200MB). Adjust if needed.
-          $threshold = 200MB
+    - name: Show candidate processes
+      debug:
+        msg: "{{ candidates.stdout | from_json }}"
 
-          $processes = Get-Process |
-            Where-Object { $_.WorkingSet -gt $threshold -and ($excluded -notcontains $_.ProcessName) } |
-            Sort-Object -Property WorkingSet -Descending |
-            Select-Object -First $limit
-
-          foreach ($proc in $processes) {
-            $memMB = [math]::Round($proc.WorkingSet / 1MB, 2)
-            Write-Output ("Killing process: {0} (ID: {1}, Memory: {2} MB)" -f $proc.ProcessName, $proc.Id, $memMB)
-            if (-not $whatIf) {
-              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            } else {
-              Stop-Process -Id $proc.Id -WhatIf -ErrorAction SilentlyContinue
+    - name: Kill each candidate by Id with retries and verification
+      ansible.windows.win_powershell:
+        script: |
+          $whatIf = {{ ' $true' if what_if_mode else ' $false' }}
+          $retries = {{ kill_retries }}
+          $delay = {{ kill_retry_delay }}
+          $candidates = {{ candidates.stdout | to_json }}
+          $results = @()
+          foreach ($c in $candidates) {
+            $id = $c.Id
+            $name = $c.ProcessName
+            $entry = [ordered]@{ ProcessName = $name; Id = $id; Attempts = 0; Status = 'Pending' }
+            $stopped = $false
+            for ($i=1; $i -le $retries; $i++) {
+              $entry.Attempts = $i
+              $proc = Get-Process -Id $id -ErrorAction SilentlyContinue
+              if ($null -eq $proc) { $entry.Status = 'NotFound'; $stopped = $true; break }
+              if (-not $whatIf) {
+                try {
+                  Stop-Process -Id $id -Force -ErrorAction Stop
+                } catch {
+                  $entry.Error = $_.Exception.Message
+                }
+              } else {
+                Stop-Process -Id $id -WhatIf -ErrorAction SilentlyContinue
+              }
+              Start-Sleep -Seconds $delay
+              $proc = Get-Process -Id $id -ErrorAction SilentlyContinue
+              if ($null -eq $proc) { $entry.Status = 'Stopped'; $stopped = $true; break }
             }
+            if (-not $stopped -and $entry.Status -ne 'Stopped') { $entry.Status = 'StillRunning' }
+            $results += $entry
           }
+          $results | ConvertTo-Json -Depth 4
       register: kill_result
 
-    - name: Display kill results
+    - name: Show kill results
       debug:
-        var: kill_result.output
+        msg: "{{ kill_result.stdout | from_json }}"
 
