@@ -1,6 +1,6 @@
 ---
 - name: Create Linux user with default password and force change
-  hosts: lin_users
+  hosts: lin_servers
   become: yes
   tasks:
     - name: Ensure user exists with default password
