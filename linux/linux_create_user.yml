@@ -1,21 +1,17 @@
 ---
 - name: Create Linux user with default password and force change
-  hosts: lin_servers
+  hosts: lin_users
   become: yes
-  vars:
-    username: "{{ user_name | default('demo') }}"   # pass at runtime, defaults to 'demo'
-    default_password: "demo123"
   tasks:
     - name: Ensure user exists with default password
       ansible.builtin.user:
-        name: "{{ username }}"
-        state: present
-        create_home: yes
+        name: demo_user
+        comment: "Demo User Account"
         shell: /bin/bash
-        password: "{{ default_password | password_hash('sha512') }}"
+        home: /home/demo_user
+        create_home: yes
+        password: "{{ 'MySecurePassword123' | password_hash('sha512') }}"
 
     - name: Force password change on next login
-      ansible.builtin.command: chage -d 0 "{{ username }}"
-      args:
-        warn: false
+      ansible.builtin.command: chage -d 0 demo_user
 
