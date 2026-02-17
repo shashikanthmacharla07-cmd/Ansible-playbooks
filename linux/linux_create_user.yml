@@ -1,17 +1,21 @@
 ---
-- name: Create Linux user with default password and force change
+- name: Create Linux user dynamically
   hosts: lin_servers
   become: yes
+  vars:
+    # Default username if none is provided
+    new_user: "{{ incident_user | default('demo_user') }}"
+    default_password: "{{ 'MySecurePassword123' | password_hash('sha512') }}"
   tasks:
     - name: Ensure user exists with default password
       ansible.builtin.user:
-        name: demo_user
-        comment: "Demo User Account"
+        name: "{{ new_user }}"
+        comment: "Incident-created user"
         shell: /bin/bash
-        home: /home/demo_user
+        home: "/home/{{ new_user }}"
         create_home: yes
-        password: "{{ 'MySecurePassword123' | password_hash('sha512') }}"
+        password: "{{ default_password }}"
 
     - name: Force password change on next login
-      ansible.builtin.command: chage -d 0 demo_user
+      ansible.builtin.command: chage -d 0 "{{ new_user }}"
 
