@@ -14,11 +14,12 @@
       register: before_files
 
     - name: Log files before cleanup
-      lineinfile:
+      blockinfile:
         path: "{{ log_file }}"
-        line: "=== BEFORE === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ before_files.stdout }}"
+        block: |
+          === BEFORE === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}
+          {{ before_files.stdout }}
         create: yes
-          ### delegate_to: localhost
       become: yes
 
     - name: Remove compressed log files
@@ -27,16 +28,19 @@
         state: absent
       loop: "{{ before_files.stdout_lines }}"
       when: before_files.stdout_lines | length > 0
+      become: yes
+      ignore_errors: yes
 
     - name: List compressed log files after cleanup
       shell: "find /var/log -type f \\( -name '*.zip' -o -name '*.gz' \\)"
       register: after_files
 
     - name: Log files after cleanup
-      lineinfile:
+      blockinfile:
         path: "{{ log_file }}"
-        line: "=== AFTER === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}\n{{ after_files.stdout }}"
+        block: |
+          === AFTER === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}
+          {{ after_files.stdout }}
         create: yes
-          #delegate_to: localhost
       become: yes
 
