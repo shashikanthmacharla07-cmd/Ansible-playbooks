@@ -5,9 +5,8 @@
   gather_facts: no
 
   vars:
-    cpu_threshold: 40   # lowered for testing, adjust for production
+    cpu_threshold: 40   # adjust as needed
     log_file: /var/log/high_cpu_kill.log
-    safe_processes: ["systemd", "sshd", "kubectl"]
 
   tasks:
 
@@ -24,10 +23,14 @@
         create: yes
       become: yes
 
-    - name: Find PIDs above threshold (excluding safe processes)
+    - name: Show raw ps output (debug for AWX)
+      debug:
+        var: top_processes.stdout
+
+    - name: Find PIDs above threshold
       shell: >
-        ps -eo pid,comm,%cpu --no-headers --sort=-%cpu |
-        awk '{if ($3+0 > {{ cpu_threshold }} && $2 !~ /{{ safe_processes | join("|") }}/) print $1}'
+        ps -eo pid,%cpu,comm --no-headers --sort=-%cpu |
+        awk '{if ($2+0 > {{ cpu_threshold }}) print $1}'
       register: high_cpu_pids
 
     - name: Show high CPU PIDs
