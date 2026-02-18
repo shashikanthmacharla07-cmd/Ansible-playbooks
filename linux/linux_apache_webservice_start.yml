@@ -1,0 +1,43 @@
+---
+- name: Ensure Apache2 service is running
+  hosts: lin_servers
+  become: yes
+  gather_facts: no
+
+  vars:
+    log_file: /var/log/apache_service_audit.log
+
+  tasks:
+
+    - name: Check Apache2 service status before start
+      ansible.builtin.service_facts:
+      register: svc_facts
+
+    - name: Log Apache2 status before start
+      blockinfile:
+        path: "{{ log_file }}"
+        block: |
+          === BEFORE === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}
+          Status: {{ svc_facts.ansible_facts.services['apache2'].state | default('unknown') }}
+        create: yes
+      become: yes
+
+    - name: Start Apache2 service
+      ansible.builtin.service:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: Check Apache2 service status after start
+      ansible.builtin.service_facts:
+      register: svc_facts_after
+
+    - name: Log Apache2 status after start
+      blockinfile:
+        path: "{{ log_file }}"
+        block: |
+          === AFTER === {{ lookup('pipe','date +%Y-%m-%dT%H:%M:%S') }}
+          Status: {{ svc_facts_after.ansible_facts.services['apache2'].state | default('unknown') }}
+        create: yes
+      become: yes
+
